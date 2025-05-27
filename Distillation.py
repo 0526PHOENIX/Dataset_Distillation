@@ -27,7 +27,7 @@ Main Function
 """
 if __name__ == '__main__':
 
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 
     model = Iso_Dilate_Shuffle(8).to(device = device)
 
@@ -43,7 +43,6 @@ if __name__ == '__main__':
     # Distillation
     params = {
                 'batch':        2,
-                'lr':           1e-3,
                 'model':        model,
                 'device':       device,
                 'data':         data,

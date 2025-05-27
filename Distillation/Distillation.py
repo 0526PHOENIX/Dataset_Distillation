@@ -25,7 +25,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 import torch
 from torch import Tensor
-from torch.optim import AdamW
+from torch.optim import Adam
 
 from torch.nn import Parameter
 from torch.nn.utils.stateless import functional_call
@@ -92,7 +92,7 @@ class Distillation():
     def initialization(self) -> None:
 
         # Training Data Loader and Sample Index
-        self.val_dl = DL(root = self.data, mode = 'Train', device = self.device, batch_size = self.batch)
+        self.val_dl = DL(root = self.data, mode = 'Val', device = self.device, batch_size = self.batch)
 
         return
     
@@ -103,13 +103,15 @@ class Distillation():
     """
     def main(self) -> None:
 
-        syn_real1 = Parameter(torch.randn(4, 7, 256, 256, requires_grad = True).to(self.device))  # 合成 MR
-        syn_real2 = Parameter(torch.randn(4, 1, 256, 256, requires_grad = True).to(self.device))  # 合成 CT
+        syn_real1 = Parameter(torch.randn(2, 7, 256, 256, requires_grad = True).to(self.device))  # 合成 MR
+        syn_real2 = Parameter(torch.randn(2, 1, 256, 256, requires_grad = True).to(self.device))  # 合成 CT
 
-        # Optimizer: AdamW
-        out_opt = AdamW([syn_real1, syn_real2], lr = self.lr, weight_decay = 0.05)
+        self.save_images(torch.tanh(syn_real1), torch.tanh(syn_real2), postfix = '__')
 
-        for k in range(10):
+        # Optimizer: Adam
+        out_opt = Adam([syn_real1, syn_real2], lr = self.lr)
+
+        for k in range(150):
             
             # Model
             model = self.model
@@ -117,43 +119,48 @@ class Distillation():
             # Model Paramenters
             theta = {name: param.clone().detach().requires_grad_(True) for name, param in model.named_parameters()}
 
+            # 每一輪都映射到 [-1, 1]
+            syn_real1_ = torch.tanh(syn_real1)
+            syn_real2_ = torch.tanh(syn_real2)
+
             # Inner loop
-            for _ in range(3):
+            for _ in range(20):
 
-                for i in range(0, 4, self.batch):
+                for i in range(0, 2, self.batch):
 
-                    syn_real1_g = syn_real1[i : i + self.batch]
-                    syn_real2_g = syn_real2[i : i + self.batch]
+                    syn_real1_g = syn_real1_[i : i + self.batch]
+                    syn_real2_g = syn_real2_[i : i + self.batch]
 
                     syn_fake2_g = functional_call(model, theta, (syn_real1_g,))
 
-                    # Total Loss
-                    loss = torch.tensor(0.0, requires_grad = True).to(self.device)
-
                     # Pixelwise Loss
-                    loss = loss + self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
+                    loss = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
 
                     grads = torch.autograd.grad(loss, theta.values(), create_graph = True)
-                    theta = {name: param - self.lr * grad for (name, param), grad in zip(theta.items(), grads)}
+                    theta = {name: param - 1e-3 * grad for (name, param), grad in zip(theta.items(), grads)}
 
-            val_loss = torch.tensor(0.0, requires_grad = True).to(self.device)
-            for batch_tuple in self.val_dl:
+            val_loss = 0
+            for batch_index, batch_tuple in enumerate(self.val_dl):
 
                 real1_g, real2_g, _, _ = batch_tuple
 
                 # Outer loop: 評估在驗證集上表現，反向更新 d_MR, d_CT
                 fake2_g = functional_call(model, theta, (real1_g,))
 
-                val_loss = val_loss + self.get_loss.get_pix_loss(fake2_g, real2_g)
+                val_loss += self.get_loss.get_pix_loss(fake2_g, real2_g)
 
-                break
+                if batch_index > 10:
+                    break
 
             # 對 d_MR, d_CT 求梯度
             out_opt.zero_grad()
             val_loss.backward()
             out_opt.step()
 
-            self.save_images(syn_real1_g, syn_real2_g, postfix = str(k))
+            print()
+            print(k, ':', val_loss.mean().item() / 10)
+
+            self.save_images(torch.tanh(syn_real1), torch.tanh(syn_real2))
 
         return
 
@@ -162,7 +169,7 @@ class Distillation():
     Save Image
     ====================================================================================================================
     """ 
-    def save_images(self, syn_real1_g: Tensor, syn_real2_g: Tensor, postfix: str) -> None:
+    def save_images(self, syn_real1_g: Tensor, syn_real2_g: Tensor, postfix: str = '_') -> None:
 
         syn_real1_a = syn_real1_g.detach().cpu().numpy()
         syn_real2_a = syn_real2_g.detach().cpu().numpy()
@@ -196,5 +203,5 @@ class Distillation():
 
         # Save Figure
         plt.tight_layout()
-        plt.savefig(postfix + '.png', format = 'png', dpi = 300)
+        plt.savefig('./Image/' + postfix + '.png', format = 'png', dpi = 300)
         plt.close()
