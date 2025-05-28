@@ -150,11 +150,19 @@ class DL(DataLoader):
                  mode: str | Literal['Train', 'Val', 'Test'], 
                  fold: str | Literal['01', '02', '03', '04'] = '01',
                  device: torch.device = torch.device('cpu'), 
-                 batch_size: int = 16) -> None:
+                 batch_size: int = 16,
+                 shuffle: bool = None,
+                 augment: bool = None,
+                 *args,
+                 **kwargs) -> None:
 
         # Check Mode
         if mode not in ['Train', 'Val', 'Test']:
             raise TypeError('Invalid Mode')
+        
+        # Shuffle & Augment or Not
+        self.shuffle = shuffle or (mode == 'Train')
+        self.augment = augment or (mode == 'Train')
         
         # Device
         self.device = device
@@ -164,9 +172,6 @@ class DL(DataLoader):
 
         # Parent Class Initialization
         super().__init__(dataset, batch_size, shuffle = (mode == 'Train'), drop_last = False, num_workers = 4, pin_memory = True)
-
-        # Augment or Not
-        self.augment = (mode == 'Train')
 
         return
 

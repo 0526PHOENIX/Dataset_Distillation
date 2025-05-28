@@ -19,17 +19,18 @@ import datetime
 from typing import Literal
 from tqdm import tqdm
 
+import random
+
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 import torch
+import torch.nn.functional as F
+
 from torch import Tensor
-from torch.optim import Adam
-
+from torch.optim import SGD
 from torch.nn import Parameter
-from torch.nn.utils.stateless import functional_call
-
 from Utils import *
 
 
@@ -46,8 +47,9 @@ class Distillation():
     ====================================================================================================================
     """
     def __init__(self,
-                 lr: float                  = 1e-3,
+                 epoch: list[int]           = [400, 100, 100],
                  batch: int                 = 16,
+                 lr: float                  = 1e-3,
                  model: torch.nn.Module     = None,
                  device: torch.device       = torch.device('cpu'),
                  data: str                  = "",
@@ -62,6 +64,7 @@ class Distillation():
         print('\n' + 'Training on: ' + str(self.device))
 
         # Total Epoch & Batch Size
+        self.epoch, self.teacher_epoch, self.student_epoch = epoch
         self.batch = batch
 
         # Learning Rate
@@ -91,8 +94,12 @@ class Distillation():
     """
     def initialization(self) -> None:
 
-        # Training Data Loader and Sample Index
-        self.val_dl = DL(root = self.data, mode = 'Val', device = self.device, batch_size = self.batch)
+        # Training Timestamp
+        self.time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+        print('\n' + 'Start From: ' + self.time)
+
+        # Training Data Loader
+        self.train_dl = DL(root = self.data, mode = 'Train', device = self.device, batch_size = self.batch)
 
         return
     
@@ -103,64 +110,72 @@ class Distillation():
     """
     def main(self) -> None:
 
-        syn_real1 = Parameter(torch.randn(2, 7, 256, 256, requires_grad = True).to(self.device))  # 合成 MR
-        syn_real2 = Parameter(torch.randn(2, 1, 256, 256, requires_grad = True).to(self.device))  # 合成 CT
+        # 
+        syn_real1_g = Parameter(torch.randn(5, 7, 256, 256, requires_grad = True).to(self.device))
+        syn_real2_g = Parameter(torch.randn(5, 1, 256, 256, requires_grad = True).to(self.device))
 
-        self.save_images(torch.tanh(syn_real1), torch.tanh(syn_real2), postfix = '__')
+        self.save_images(syn_real1_g, syn_real2_g, postfix = '__')
 
-        # Optimizer: Adam
-        out_opt = Adam([syn_real1, syn_real2], lr = self.lr)
+        syn_lr = torch.tensor(0.01, requires_grad = True).to(self.device)
 
-        for k in range(150):
+        # Optimizer: SGD
+        opt_im = SGD([syn_real1_g, syn_real2_g], lr = self.lr, momentum = 0.5)
+        opt_lr = SGD([syn_lr], lr = self.lr, momentum = 0.5)
+
+        # 
+        path = ""
+        teacher_trajectory = sorted(os.listdir(path))
+
+        # Main Distillation
+        for epoch_index in range(1, self.epoch + 1):
+
+            # 
+            start_epoch = random.randint(0, len(teacher_trajectory) - self.teacher_epoch - 1)
+            final_epoch = start_epoch + self.teacher_epoch
+
+            # 
+            start_params = torch.load(teacher_trajectory[start_epoch])['model_state']
+            final_params = torch.load(teacher_trajectory[final_epoch])['model_state']
             
             # Model
             model = self.model
+            model.train()
+            
+            # 
+            student_params = [start_params.clone().requires_grad_()]
 
-            # Model Paramenters
-            theta = {name: param.clone().detach().requires_grad_(True) for name, param in model.named_parameters()}
+            # 
+            for student_epoch_index in range(1, self.student_epoch + 1):
 
-            # 每一輪都映射到 [-1, 1]
-            syn_real1_ = torch.tanh(syn_real1)
-            syn_real2_ = torch.tanh(syn_real2)
+                syn_fake2_g = model(syn_real1_g)
 
-            # Inner loop
-            for _ in range(20):
+                loss = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
 
-                for i in range(0, 2, self.batch):
+                grad = torch.autograd.grad(loss, student_params[-1], create_graph = True)[0]
 
-                    syn_real1_g = syn_real1_[i : i + self.batch]
-                    syn_real2_g = syn_real2_[i : i + self.batch]
+                student_params.append(student_params[-1] - syn_lr * grad)
 
-                    syn_fake2_g = functional_call(model, theta, (syn_real1_g,))
+        param_loss = torch.tensor(0.0).to(self.device)
+        param_dist = torch.tensor(0.0).to(self.device)
 
-                    # Pixelwise Loss
-                    loss = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
+        param_loss += F.mse_loss(student_params[-1], final_params, reduction = "sum")
+        param_dist += F.mse_loss(start_params, final_params, reduction = "sum")
 
-                    grads = torch.autograd.grad(loss, theta.values(), create_graph = True)
-                    theta = {name: param - 1e-3 * grad for (name, param), grad in zip(theta.items(), grads)}
+        num_params = sum([np.prod(params.size()) for params in (model.parameters())])
+        param_loss /= num_params
+        param_dist /= num_params
 
-            val_loss = 0
-            for batch_index, batch_tuple in enumerate(self.val_dl):
+        param_loss /= param_dist
 
-                real1_g, real2_g, _, _ = batch_tuple
+        grand_loss = param_loss
 
-                # Outer loop: 評估在驗證集上表現，反向更新 d_MR, d_CT
-                fake2_g = functional_call(model, theta, (real1_g,))
+        opt_im.zero_grad()
+        opt_lr.zero_grad()
 
-                val_loss += self.get_loss.get_pix_loss(fake2_g, real2_g)
+        grand_loss.backward()
 
-                if batch_index > 10:
-                    break
-
-            # 對 d_MR, d_CT 求梯度
-            out_opt.zero_grad()
-            val_loss.backward()
-            out_opt.step()
-
-            print()
-            print(k, ':', val_loss.mean().item() / 10)
-
-            self.save_images(torch.tanh(syn_real1), torch.tanh(syn_real2))
+        opt_im.step()
+        opt_lr.step()
 
         return
 

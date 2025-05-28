@@ -4,57 +4,11 @@ Package
 ========================================================================================================================
 """
 import torch
+from torch import Tensor
 from torch.nn import Module, Parameter
-from torch import Tensor
-import torch
-from torch import Tensor
-from torch.nn import Module
 from torch.nn import Conv2d
 from torch.nn import AdaptiveAvgPool2d, AdaptiveMaxPool2d
 from torch.nn import Sigmoid, GELU, Tanh
-from torch.jit import fork, wait
-
-
-# """
-# ========================================================================================================================
-# Layer Normalization Old
-# ========================================================================================================================
-# """
-# class LayerNorm(Module):
-
-#     """
-#     ====================================================================================================================
-#     Initialization
-#     ====================================================================================================================
-#     """
-#     def __init__(self, filters: int) -> None:
-
-#         super().__init__()
-        
-#         # Scale and Shift
-#         self.scales = Parameter(torch.ones(filters, 1, 1))
-#         self.shifts = Parameter(torch.zeros(filters, 1, 1))
-
-#         return
-    
-#     """
-#     ====================================================================================================================
-#     Forward
-#     ====================================================================================================================
-#     """
-#     def forward(self, img_in1: Tensor) -> Tensor:
-        
-#         # Mean and STD
-#         avg = img_in1.mean(dim = (2, 3), keepdim = True)
-#         std = img_in1.std(dim = (2, 3), keepdim = True, unbiased = False)
-
-#         # Z-score
-#         img_in1 = (img_in1 - avg) / (std + 1e-5)
-
-#         # Scale and Shift
-#         img_out = (self.scales * img_in1) + self.shifts
-
-#         return img_out
 
 
 """
@@ -235,84 +189,3 @@ class AttentionBlock(Module):
         img_out = img_in2 * img_out
 
         return img_out
-
-
-"""
-========================================================================================================================
-Heterogeneous Convolution
-========================================================================================================================
-"""
-class HetConv(Module):
-
-    """
-    ====================================================================================================================
-    Initialization
-    ====================================================================================================================
-    """
-    def __init__(self, filters: int, partial: int = 1) -> None:
-
-        super().__init__()
-
-        # Partial Number
-        self.partial = partial
-
-        # Homogeneous Convolution
-        if self.partial == 1:
-            
-            # 
-            self.block0 = Conv2d(filters, filters, kernel_size = 3, padding = 1)
-
-        # Heterogeneous Convolution
-        elif self.partial > 1:
-
-            # Filter List & Split List
-            self.filters = [filters // partial, filters - filters // partial]
-
-            # 
-            self.block0 = Conv2d(self.filters[0], self.filters[0], kernel_size = 3, padding = 1)
-            self.block1 = Conv2d(self.filters[1], self.filters[1], kernel_size = 1)
-
-        # Error
-        else:
-
-            raise TypeError('Invalid Partial Number')
-
-        return
-
-    """
-    ====================================================================================================================
-    Forward
-    ====================================================================================================================
-    """
-    def forward(self, img_in1: Tensor) -> Tensor:
-
-        if self.partial == 1:
-
-            img_out = self.block0(img_in1)
-
-        else:
-            
-            # Split Tensor
-            img_out = torch.split(img_in1, self.filters, dim = 1)
-
-            # Parallel Computing
-            futures = [fork(self.block0, img_out[0]), fork(self.block1, img_out[1])]
-
-            # Concatenation
-            img_out = torch.cat([wait(feature) for feature in futures], dim = 1)
-
-        return img_out
-
-
-"""
-========================================================================================================================
-Main Function
-========================================================================================================================
-"""
-if __name__ == '__main__':
-
-    model = DyTBlock(32).to(torch.device('cuda'))
-
-    print(sum(param.numel() for param in model.parameters()))
-
-    pass
