@@ -7,14 +7,6 @@ import torch
 from torch import Tensor
 from torch.nn import Module, Parameter
 from torch.nn import Conv2d
-from torch.nn import AdaptiveAvgPool2d, AdaptiveMaxPool2d
-from torch.nn import Sigmoid, GELU, Tanh
-
-
-import os, sys
-sys.path.append(os.path.abspath(os.path.join(__file__, '..', '..')))
-from Model import *
-
 
 """
 ========================================================================================================================

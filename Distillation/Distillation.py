@@ -110,70 +110,77 @@ class Distillation():
     """
     def main(self) -> None:
 
-        # 
+        # Synthetic MR & CT
         syn_real1_g = Parameter(torch.randn(5, 7, 256, 256, requires_grad = True).to(self.device))
         syn_real2_g = Parameter(torch.randn(5, 1, 256, 256, requires_grad = True).to(self.device))
 
-        self.save_images(syn_real1_g, syn_real2_g, postfix = '__')
+        # Model
+        model = SwitchParams(self.model)
+        model.train()
 
+        # Learning Rate
         syn_lr = torch.tensor(0.01, requires_grad = True).to(self.device)
 
         # Optimizer: SGD
         opt_im = SGD([syn_real1_g, syn_real2_g], lr = self.lr, momentum = 0.5)
         opt_lr = SGD([syn_lr], lr = self.lr, momentum = 0.5)
 
-        # 
+        # Trajectory Path
         path = ""
         teacher_trajectory = sorted(os.listdir(path))
 
         # Main Distillation
         for epoch_index in range(1, self.epoch + 1):
 
-            # 
+            # Starting & Ending Point
             start_epoch = random.randint(0, len(teacher_trajectory) - self.teacher_epoch - 1)
             final_epoch = start_epoch + self.teacher_epoch
 
-            # 
+            # Load Teacher's Parameter
             start_params = torch.load(teacher_trajectory[start_epoch])['model_state']
             final_params = torch.load(teacher_trajectory[final_epoch])['model_state']
             
-            # Model
-            model = SwitchParams(self.model)
-            model.train()
-            
-            # 
-            student_params = torch.cat([param.data.to(self.device).reshape(-1) for param in start_params], 0).requires_grad_(True)
+            # Get Student's Parameter
+            student_params = torch.cat([param.data.view(-1).to(self.device) for param in start_params.values()]).requires_grad_(True)
 
-            # 
+            # Simulate Training
             for student_epoch_index in range(1, self.student_epoch + 1):
-
+                
+                # Forward Pass wtih Flatten Parameter
                 syn_fake2_g = model(syn_real1_g, student_params)
 
+                # Pixel-Wise Loss
                 loss = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
 
+                # Compute Gradient
                 grad = torch.autograd.grad(loss, student_params, create_graph = True)[0]
 
-                student_params -= syn_lr * grad
+                # Gradient Descent
+                student_params = student_params - syn_lr * grad
 
+            # Flatten Teacher's Parameter
+            start_params = torch.cat([param.data.view(-1).to(self.device) for param in start_params.values()])
+            final_params = torch.cat([param.data.view(-1).to(self.device) for param in final_params.values()])
+
+            # Initialize Loss Value
             param_loss = torch.tensor(0.0).to(self.device)
             param_dist = torch.tensor(0.0).to(self.device)
 
+            # Compute Loss
             param_loss += F.mse_loss(student_params, final_params, reduction = "sum")
             param_dist += F.mse_loss(start_params, final_params, reduction = "sum")
 
-            num_params = sum([np.prod(params.size()) for params in (model.parameters())])
-            param_loss /= num_params
-            param_dist /= num_params
-
+            # Normalize
+            param_loss /= model.param_total
+            param_dist /= model.param_total
             param_loss /= param_dist
 
-            grand_loss = param_loss
-
+            # Fresh Optimizer's Gradient
             opt_im.zero_grad()
             opt_lr.zero_grad()
 
-            grand_loss.backward()
-
+            # Gradient Descent
+            param_loss.backward()
             opt_im.step()
             opt_lr.step()
 
@@ -185,7 +192,8 @@ class Distillation():
     ====================================================================================================================
     """ 
     def save_images(self, syn_real1_g: Tensor, syn_real2_g: Tensor, postfix: str = '_') -> None:
-
+        
+        # Tensor to Array
         syn_real1_a = syn_real1_g.detach().cpu().numpy()
         syn_real2_a = syn_real2_g.detach().cpu().numpy()
 
