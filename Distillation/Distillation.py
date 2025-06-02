@@ -138,44 +138,44 @@ class Distillation():
             final_params = torch.load(teacher_trajectory[final_epoch])['model_state']
             
             # Model
-            model = self.model
+            model = SwitchParams(self.model)
             model.train()
             
             # 
-            student_params = [start_params.clone().requires_grad_()]
+            student_params = torch.cat([param.data.to(self.device).reshape(-1) for param in start_params], 0).requires_grad_(True)
 
             # 
             for student_epoch_index in range(1, self.student_epoch + 1):
 
-                syn_fake2_g = model(syn_real1_g)
+                syn_fake2_g = model(syn_real1_g, student_params)
 
                 loss = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
 
-                grad = torch.autograd.grad(loss, student_params[-1], create_graph = True)[0]
+                grad = torch.autograd.grad(loss, student_params, create_graph = True)[0]
 
-                student_params.append(student_params[-1] - syn_lr * grad)
+                student_params -= syn_lr * grad
 
-        param_loss = torch.tensor(0.0).to(self.device)
-        param_dist = torch.tensor(0.0).to(self.device)
+            param_loss = torch.tensor(0.0).to(self.device)
+            param_dist = torch.tensor(0.0).to(self.device)
 
-        param_loss += F.mse_loss(student_params[-1], final_params, reduction = "sum")
-        param_dist += F.mse_loss(start_params, final_params, reduction = "sum")
+            param_loss += F.mse_loss(student_params, final_params, reduction = "sum")
+            param_dist += F.mse_loss(start_params, final_params, reduction = "sum")
 
-        num_params = sum([np.prod(params.size()) for params in (model.parameters())])
-        param_loss /= num_params
-        param_dist /= num_params
+            num_params = sum([np.prod(params.size()) for params in (model.parameters())])
+            param_loss /= num_params
+            param_dist /= num_params
 
-        param_loss /= param_dist
+            param_loss /= param_dist
 
-        grand_loss = param_loss
+            grand_loss = param_loss
 
-        opt_im.zero_grad()
-        opt_lr.zero_grad()
+            opt_im.zero_grad()
+            opt_lr.zero_grad()
 
-        grand_loss.backward()
+            grand_loss.backward()
 
-        opt_im.step()
-        opt_lr.step()
+            opt_im.step()
+            opt_lr.step()
 
         return
 
