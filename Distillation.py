@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     model = Iso_Dilate_Shuffle(16).to(device = device)
 
-    pretrain = False
+    pretrain = True
 
     """
     ====================================================================================================================
@@ -53,8 +53,6 @@ if __name__ == '__main__':
                     'lr':           1e-3,
                     'model':        model,
                     'device':       device,
-                    'loss_lambda':  [5, 3, 7, 2],
-                    'loss_change':  [1.00, 0.75, 1.50, 1.25],
                     'data':         data,
                     'result':       result,
                  }
@@ -66,9 +64,9 @@ if __name__ == '__main__':
 
         # Distillation
         params = {
-                    'epoch':        [100, 1, 10],
+                    'epoch':        [100, 1, 20],
                     'batch':        2,
-                    'lr':           1e-6,
+                    'lr':           1e-4,
                     'model':        model,
                     'device':       device,
                     'data':         data,

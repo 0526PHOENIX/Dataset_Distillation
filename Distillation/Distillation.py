@@ -81,10 +81,6 @@ class Distillation():
         self.result = result
         self.weight = weight
 
-        # Loss and Metrics
-        self.get_loss = Loss(device = self.device)
-        self.get_metrics = Metrics(device = self.device)
-
         # Model, Optimizer, Data Loader
         self.initialization()
 
@@ -114,8 +110,8 @@ class Distillation():
     def main(self) -> None:
 
         # Synthetic MR & CT
-        syn_real1_g = Parameter(torch.randn(5, 7, 256, 256, requires_grad = True).to(self.device))
-        syn_real2_g = Parameter(torch.randn(5, 1, 256, 256, requires_grad = True).to(self.device))
+        syn_real1_g = Parameter(torch.tanh(torch.randn(2, 7, 256, 256, requires_grad = True).to(self.device)))
+        syn_real2_g = Parameter(torch.tanh(torch.randn(2, 1, 256, 256, requires_grad = True).to(self.device)))
 
         # Raw Synthetic MR & CT
         raw_syn_real1_g = syn_real1_g.clone().detach()
@@ -156,7 +152,7 @@ class Distillation():
             for student_epoch_index in range(1, self.student_epoch + 1):
                 
                 # Forward Pass wtih Flatten Parameter
-                syn_fake2_g = model(syn_real1_g, student_params)
+                syn_fake2_g = model(syn_real1_g, flatten_param = student_params)
 
                 # Pixel-Wise Loss
                 loss = F.mse_loss(syn_fake2_g, syn_real2_g) + F.mse_loss(syn_real2_g, syn_fake2_g)
@@ -212,13 +208,13 @@ class Distillation():
             for _ in student_params:
                 del _
 
-        # Synthetic MR & CT
-        syn_real1_a = syn_real1_g.detach().cpu().numpy()
-        syn_real2_a = syn_real2_g.detach().cpu().numpy()
+        # # Synthetic MR & CT
+        # syn_real1_a = syn_real1_g.detach().cpu().numpy()
+        # syn_real2_a = syn_real2_g.detach().cpu().numpy()
 
-        # Save Data
-        nib.save(nib.Nifti1Image(syn_real1_a, np.eye(4)), './Image/' + 'Syn_MR.nii')
-        nib.save(nib.Nifti1Image(syn_real2_a, np.eye(4)), './Image/' + 'Syn_CT.nii')
+        # # Save Data
+        # nib.save(nib.Nifti1Image(syn_real1_a, np.eye(4)), './Image/' + 'Syn_MR.nii')
+        # nib.save(nib.Nifti1Image(syn_real2_a, np.eye(4)), './Image/' + 'Syn_CT.nii')
 
         return
 
@@ -242,22 +238,22 @@ class Distillation():
 
         # Display Input MR Image
         ax = axs[0][0]
-        ax.imshow(syn_real1_a[0, 3], cmap = 'gray')
+        ax.imshow(syn_real1_a[0, 3], cmap = 'gray', vmin = -1, vmax = 1)
         ax.set_title('Distilled MR 1')
 
         # Display Output CT Image
         ax = axs[0][1]
-        ax.imshow(syn_real2_a[0, 0], cmap = 'gray')
+        ax.imshow(syn_real2_a[0, 0], cmap = 'gray', vmin = -1, vmax = 1)
         ax.set_title('Distilled CT 1')
 
         # Display Input MR Image
         ax = axs[1][0]
-        ax.imshow(syn_real1_a[1, 3], cmap = 'gray')
+        ax.imshow(syn_real1_a[1, 3], cmap = 'gray', vmin = -1, vmax = 1)
         ax.set_title('Distilled MR 2')
 
         # Display Output CT Image
         ax = axs[1][1]
-        ax.imshow(syn_real2_a[1, 0], cmap = 'gray')
+        ax.imshow(syn_real2_a[1, 0], cmap = 'gray', vmin = -1, vmax = 1)
         ax.set_title('Distilled CT 2')
 
         # Save Figure

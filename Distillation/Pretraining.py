@@ -23,6 +23,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 from torch.optim import SGD
 from torch.utils.tensorboard import SummaryWriter
@@ -35,19 +36,15 @@ from Utils import *
 Global Constant
 ========================================================================================================================
 """
-METRICS = 12
+METRICS = 8
 METRICS_LOSS        = 0
-METRICS_LOSS_PIX    = 1
-METRICS_LOSS_GDL    = 2
-METRICS_LOSS_SIM    = 3
-METRICS_LOSS_PER    = 4
-METRICS_HEAD_MAE    = 5
-METRICS_HEAD_PSNR   = 6
-METRICS_HEAD_SSIM   = 7
-METRICS_BONE_MAE    = 8
-METRICS_BONE_PSNR   = 9
-METRICS_BONE_SSIM   = 10
-METRICS_BONE_DICE   = 11
+METRICS_HEAD_MAE    = 1
+METRICS_HEAD_PSNR   = 2
+METRICS_HEAD_SSIM   = 3
+METRICS_BONE_MAE    = 4
+METRICS_BONE_PSNR   = 5
+METRICS_BONE_SSIM   = 6
+METRICS_BONE_DICE   = 7
 
 
 """
@@ -68,10 +65,8 @@ class Pretraining():
                  lr: float                  = 1e-3,
                  model: torch.nn.Module     = None,
                  device: torch.device       = torch.device('cpu'),
-                 loss_lambda: list[float]   = [1, 1, 1, 1],
                  data: str                  = "",
                  result: str                = "",
-                 weight: str                = "",
                  *args,
                  **kwargs) -> None:
         
@@ -92,16 +87,11 @@ class Pretraining():
         self.model = model.to(self.device)
         print('\n' + 'Pretraining Model: ' + type(self.model).__name__)
 
-        # Loss Function Weight + Change Rate
-        self.lambda_pix, self.lambda_gdl, self.lambda_sim, self.lambda_per = loss_lambda
-
         # File Path
         self.data = data
         self.result = result
-        self.weight = weight
 
         # Loss and Metrics
-        self.get_loss = Loss(device = self.device)
         self.get_metrics = Metrics(device = self.device)
 
         # Optimizer, Data Loader
@@ -203,27 +193,7 @@ class Pretraining():
             self.opt.zero_grad()
 
             # Total Loss
-            loss = torch.tensor(0.0, requires_grad = True).to(self.device)
-
-            if self.lambda_pix > 0:
-                # Pixelwise Loss
-                loss_pix = self.get_loss.get_pix_loss(fake2_g, real2_g)
-                loss = loss + self.lambda_pix * loss_pix
-
-            if self.lambda_gdl > 0:
-                # Gradient Difference Loss
-                loss_gdl = self.get_loss.get_gdl_loss(fake2_g, real2_g)
-                loss = loss + self.lambda_gdl * loss_gdl
-
-            if self.lambda_sim > 0:
-                # Similarity Loss
-                loss_sim = self.get_loss.get_sim_loss(fake2_g, real2_g)
-                loss = loss + self.lambda_sim * loss_sim
-
-            if self.lambda_per > 0:
-                # Perceptual Loss
-                loss_per = self.get_loss.get_per_loss(fake2_g, real2_g)
-                loss = loss + self.lambda_per * loss_per
+            loss = F.mse_loss(fake2_g, real2_g) + F.mse_loss(real2_g, fake2_g)
 
             # Gradient Descent
             loss.backward()
@@ -246,10 +216,6 @@ class Pretraining():
 
             # Save Metrics
             metrics[METRICS_LOSS,      batch_index] = loss.item()
-            metrics[METRICS_LOSS_PIX,  batch_index] = loss_pix.item() if 'loss_pix' in locals() else 0
-            metrics[METRICS_LOSS_GDL,  batch_index] = loss_gdl.item() if 'loss_gdl' in locals() else 0
-            metrics[METRICS_LOSS_SIM,  batch_index] = loss_sim.item() if 'loss_sim' in locals() else 0
-            metrics[METRICS_LOSS_PER,  batch_index] = loss_per.item() if 'loss_per' in locals() else 0
             metrics[METRICS_HEAD_MAE,  batch_index] = head_mae
             metrics[METRICS_HEAD_PSNR, batch_index] = head_psnr
             metrics[METRICS_HEAD_SSIM, batch_index] = head_ssim
@@ -285,10 +251,6 @@ class Pretraining():
             print('Epoch:',           epoch_index, file = f)
             print('Batch:',           self.batch, file = f)
             print('Learning Rate:',   self.lr, file = f)
-            print('Pix Loss Lambda:', self.lambda_pix, file = f)
-            print('GDL Loss Lambda:', self.lambda_gdl, file = f)
-            print('Sim Loss Lambda:', self.lambda_sim, file = f)
-            print('Per Loss Lambda:', self.lambda_per, file = f)
 
         return
 
@@ -305,10 +267,6 @@ class Pretraining():
         # Create Dictionary
         metrics_dict = {}
         metrics_dict['Loss/Loss']           = metrics_a[METRICS_LOSS]
-        metrics_dict['Loss/Loss_PIX']       = metrics_a[METRICS_LOSS_PIX]
-        metrics_dict['Loss/Loss_GDL']       = metrics_a[METRICS_LOSS_GDL]
-        metrics_dict['Loss/Loss_SIM']       = metrics_a[METRICS_LOSS_SIM]
-        metrics_dict['Loss/Loss_PER']       = metrics_a[METRICS_LOSS_PER]
         metrics_dict['Metrics/Head_MAE']    = metrics_a[METRICS_HEAD_MAE]
         metrics_dict['Metrics/Head_PSNR']   = metrics_a[METRICS_HEAD_PSNR]
         metrics_dict['Metrics/Head_SSIM']   = metrics_a[METRICS_HEAD_SSIM]
