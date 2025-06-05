@@ -63,7 +63,7 @@ class Training():
     ====================================================================================================================
     """
     def __init__(self,
-                 epoch: int                 = 400,
+                 epoch: int                 = 100,
                  batch: int                 = 16,
                  lr: float                  = 1e-3,
                  model: torch.nn.Module     = None,
@@ -408,6 +408,6 @@ class Training():
                 }
     
         # Save Model
-        torch.save(state, os.path.join(self.result, 'Weight', self.time + '.pt'))
+        torch.save(state, os.path.join(self.result, 'Weight', self.time + '_' + str(epoch_index) + '.pt'))
 
         return
