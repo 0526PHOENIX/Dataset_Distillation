@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     model = Iso_Dilate_Shuffle(16).to(device = device)
 
-    pretrain = True
+    pretrain = False
 
     """
     ====================================================================================================================
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # File Path
     data = os.path.abspath(os.path.join(__file__, '..', '..', 'Data', 'Data_2D'))
     result = os.path.abspath(os.path.join(__file__, '..', 'Distillation', 'Result'))
-    
+    weight = os.path.abspath(os.path.join(__file__, '..', 'Distillation', 'Result', 'Weight'))
 
     # Pretraining or Distillation
     if pretrain:
@@ -57,7 +57,7 @@ if __name__ == '__main__':
                     'loss_change':  [1.00, 0.75, 1.50, 1.25],
                     'data':         data,
                     'result':       result,
-                    }
+                 }
 
         pretraining = Pretraining(**params)
         pretraining.main()
@@ -66,12 +66,15 @@ if __name__ == '__main__':
 
         # Distillation
         params = {
+                    'epoch':        [100, 1, 10],
                     'batch':        2,
+                    'lr':           1e-6,
                     'model':        model,
                     'device':       device,
                     'data':         data,
                     'result':       result,
-                    }
+                    'weight':       weight,
+                 }
                         
         distillation = Distillation(**params)
         distillation.main()
