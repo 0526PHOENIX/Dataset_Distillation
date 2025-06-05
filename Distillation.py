@@ -27,9 +27,11 @@ Main Function
 """
 if __name__ == '__main__':
 
-    device = torch.device('cuda:1')
+    device = torch.device('cuda:2')
 
-    model = Iso_Dilate_Shuffle(8).to(device = device)
+    model = Iso_Dilate_Shuffle(16).to(device = device)
+
+    pretrain = True
 
     """
     ====================================================================================================================
@@ -38,16 +40,38 @@ if __name__ == '__main__':
     """
     # File Path
     data = os.path.abspath(os.path.join(__file__, '..', '..', 'Data', 'Data_2D'))
-    result = os.path.abspath(os.path.join(__file__, '..', 'Frame', 'Result'))
-        
-    # Distillation
-    params = {
-                'batch':        2,
-                'model':        model,
-                'device':       device,
-                'data':         data,
-                'result':       result,
-                }
-                    
-    training = Distillation(**params)
-    training.main()
+    result = os.path.abspath(os.path.join(__file__, '..', 'Distillation', 'Result'))
+    
+
+    # Pretraining or Distillation
+    if pretrain:
+
+        # Pretraining
+        params = {
+                    'epoch':        50,
+                    'batch':        16,
+                    'lr':           1e-3,
+                    'model':        model,
+                    'device':       device,
+                    'loss_lambda':  [5, 3, 7, 2],
+                    'loss_change':  [1.00, 0.75, 1.50, 1.25],
+                    'data':         data,
+                    'result':       result,
+                    }
+
+        pretraining = Pretraining(**params)
+        pretraining.main()
+
+    else:
+
+        # Distillation
+        params = {
+                    'batch':        2,
+                    'model':        model,
+                    'device':       device,
+                    'data':         data,
+                    'result':       result,
+                    }
+                        
+        distillation = Distillation(**params)
+        distillation.main()

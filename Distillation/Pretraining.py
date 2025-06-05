@@ -52,10 +52,10 @@ METRICS_BONE_DICE   = 11
 
 """
 ========================================================================================================================
-Training
+Pretraining
 ========================================================================================================================
 """
-class Training():
+class Pretraining():
 
     """
     ====================================================================================================================
@@ -79,7 +79,7 @@ class Training():
         self.device = device
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
-        print('\n' + 'Training on: ' + str(self.device))
+        print('\n' + 'Pretraining on: ' + str(self.device))
 
         # Total Epoch & Batch Size
         self.epoch = epoch
@@ -90,7 +90,7 @@ class Training():
 
         # Model
         self.model = model.to(self.device)
-        print('\n' + 'Training Model: ' + type(self.model).__name__)
+        print('\n' + 'Pretraining Model: ' + type(self.model).__name__)
 
         # Loss Function Weight + Change Rate
         self.lambda_pix, self.lambda_gdl, self.lambda_sim, self.lambda_per = loss_lambda
