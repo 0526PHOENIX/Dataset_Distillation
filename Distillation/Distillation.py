@@ -155,7 +155,7 @@ class Distillation():
                 syn_fake2_g = model(syn_real1_g, flatten_param = student_params)
 
                 # Pixel-Wise Loss
-                loss = F.mse_loss(syn_fake2_g, syn_real2_g) + F.mse_loss(syn_real2_g, syn_fake2_g)
+                loss =  F.mse_loss(syn_fake2_g, syn_real2_g)
 
                 # Compute Gradient
                 grad = torch.autograd.grad(loss, student_params, create_graph = True)[0]
@@ -164,20 +164,12 @@ class Distillation():
                 student_params = student_params - syn_lr * grad
 
             # Flatten Teacher's Parameter
-            start_params = torch.cat([param.data.view(-1).to(self.device) for param in start_params.values()])
-            final_params = torch.cat([param.data.view(-1).to(self.device) for param in final_params.values()])
+            start_params = torch.cat([param.detach().clone().view(-1).to(self.device) for param in start_params.values()])
+            final_params = torch.cat([param.detach().clone().view(-1).to(self.device) for param in final_params.values()])
 
-            # Initialize Loss Value
-            param_loss = torch.tensor(0.0).to(self.device)
-            param_dist = torch.tensor(0.0).to(self.device)
-
-            # Compute Loss
-            param_loss += F.mse_loss(student_params, final_params, reduction = "sum")
-            param_dist += F.mse_loss(start_params, final_params, reduction = "sum")
-
-            # Normalize
-            param_loss /= model.param_total
-            param_dist /= model.param_total
+            # Loss
+            param_loss = F.mse_loss(student_params, final_params, reduction = "sum")
+            param_dist = F.mse_loss(start_params, final_params, reduction = "sum")
             param_loss /= param_dist
 
             # Fresh Optimizer's Gradient
@@ -194,6 +186,8 @@ class Distillation():
             print('=' * 110)
             print('Epoch' + '\t' + str(epoch_index))
             print('Loss' + '\t' + str(param_loss.item()))
+            print('MR Gradient' + '\t' + str(syn_real1_g.grad.abs().mean().item()))
+            print('CT Gradient' + '\t' + str(syn_real2_g.grad.abs().mean().item()))
             print('MR Difference' + '\t' + str((raw_syn_real1_g - syn_real1_g).abs().mean().item()))
             print('CT Difference' + '\t' + str((raw_syn_real2_g - syn_real2_g).abs().mean().item()))
             print('=' * 110)
@@ -207,14 +201,6 @@ class Distillation():
             # Clear Student Parameters
             for _ in student_params:
                 del _
-
-        # # Synthetic MR & CT
-        # syn_real1_a = syn_real1_g.detach().cpu().numpy()
-        # syn_real2_a = syn_real2_g.detach().cpu().numpy()
-
-        # # Save Data
-        # nib.save(nib.Nifti1Image(syn_real1_a, np.eye(4)), './Image/' + 'Syn_MR.nii')
-        # nib.save(nib.Nifti1Image(syn_real2_a, np.eye(4)), './Image/' + 'Syn_CT.nii')
 
         return
 

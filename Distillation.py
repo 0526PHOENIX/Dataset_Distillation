@@ -64,9 +64,9 @@ if __name__ == '__main__':
 
         # Distillation
         params = {
-                    'epoch':        [100, 1, 20],
+                    'epoch':        [500, 1, 20],
                     'batch':        2,
-                    'lr':           1e-4,
+                    'lr':           1e-5,
                     'model':        model,
                     'device':       device,
                     'data':         data,

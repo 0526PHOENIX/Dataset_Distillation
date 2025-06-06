@@ -193,7 +193,7 @@ class Pretraining():
             self.opt.zero_grad()
 
             # Total Loss
-            loss = F.mse_loss(fake2_g, real2_g) + F.mse_loss(real2_g, fake2_g)
+            loss = F.mse_loss(fake2_g, real2_g)
 
             # Gradient Descent
             loss.backward()

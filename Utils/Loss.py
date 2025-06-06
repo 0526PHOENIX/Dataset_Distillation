@@ -18,6 +18,8 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 
 from Utils.PerceptualLoss import PerceptualLoss
 
+from Model import *
+
 
 """
 ========================================================================================================================
@@ -168,3 +170,26 @@ class Loss():
 
         # Weighted Mean
         return loss.sum() / pixels
+    
+
+"""
+========================================================================================================================
+Main Function
+========================================================================================================================
+"""
+if __name__ == '__main__':
+
+    model = Iso_Dilate_Shuffle(8)
+
+    real1 = torch.randn((1, 7, 256, 256), requires_grad = True)
+    real2 = torch.randn((1, 1, 256, 256), requires_grad = True)
+
+    fake2 = model(real1)
+
+    loss = Loss().get_pix_loss(fake2, real2)
+    loss.backward()
+
+    print()
+    print('real1 gradient', '\t', real1.grad.mean().item())
+    print('real2 gradient', '\t', real2.grad.mean().item())
+    print()
