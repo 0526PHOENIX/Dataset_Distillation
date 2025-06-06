@@ -65,6 +65,7 @@ class Pretraining():
                  lr: float                  = 1e-3,
                  model: torch.nn.Module     = None,
                  device: torch.device       = torch.device('cpu'),
+                 loss_lambda: list[float]   = [1, 1, 1, 1],
                  data: str                  = "",
                  result: str                = "",
                  *args,
@@ -87,11 +88,15 @@ class Pretraining():
         self.model = model.to(self.device)
         print('\n' + 'Pretraining Model: ' + type(self.model).__name__)
 
+        # Loss Function Weight
+        self.lambda_pix, self.lambda_gdl, self.lambda_sim, self.lambda_per = loss_lambda
+
         # File Path
         self.data = data
         self.result = result
 
         # Loss and Metrics
+        self.get_loss = Loss(device = self.device)
         self.get_metrics = Metrics(device = self.device)
 
         # Optimizer, Data Loader
@@ -193,7 +198,27 @@ class Pretraining():
             self.opt.zero_grad()
 
             # Total Loss
-            loss = F.mse_loss(fake2_g, real2_g)
+            loss = torch.tensor(0.0, requires_grad = True).to(self.device)
+
+            if self.lambda_pix > 0:
+                # Pixelwise Loss
+                loss_pix = self.get_loss.get_pix_loss(fake2_g, real2_g)
+                loss = loss + self.lambda_pix * loss_pix
+
+            if self.lambda_gdl > 0:
+                # Gradient Difference Loss
+                loss_gdl = self.get_loss.get_gdl_loss(fake2_g, real2_g)
+                loss = loss + self.lambda_gdl * loss_gdl
+
+            if self.lambda_sim > 0:
+                # Similarity Loss
+                loss_sim = self.get_loss.get_sim_loss(fake2_g, real2_g)
+                loss = loss + self.lambda_sim * loss_sim
+
+            if self.lambda_per > 0:
+                # Perceptual Loss
+                loss_per = self.get_loss.get_per_loss(fake2_g, real2_g)
+                loss = loss + self.lambda_per * loss_per
 
             # Gradient Descent
             loss.backward()

@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     model = Iso_Dilate_Shuffle(16).to(device = device)
 
-    pretrain = True
+    pretrain = False
 
     """
     ====================================================================================================================
@@ -53,6 +53,7 @@ if __name__ == '__main__':
                     'lr':           1e-3,
                     'model':        model,
                     'device':       device,
+                    'loss_lambda':  [5, 3, 7, 2],
                     'data':         data,
                     'result':       result,
                  }
@@ -66,9 +67,10 @@ if __name__ == '__main__':
         params = {
                     'epoch':        [500, 1, 20],
                     'batch':        2,
-                    'lr':           1e-5,
+                    'lr':           1e-6,
                     'model':        model,
                     'device':       device,
+                    'loss_lambda':  [5, 3, 7, 2],
                     'data':         data,
                     'result':       result,
                     'weight':       weight,

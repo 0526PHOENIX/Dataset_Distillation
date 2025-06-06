@@ -53,6 +53,7 @@ class Distillation():
                  lr: float                  = 1e-3,
                  model: torch.nn.Module     = None,
                  device: torch.device       = torch.device('cpu'),
+                 loss_lambda: list[float]   = [1, 1, 1, 1],
                  data: str                  = "",
                  result: str                = "",
                  weight: str                = "",
@@ -76,10 +77,16 @@ class Distillation():
         self.model = model.to(self.device)
         print('\n' + 'Distilling with Model: ' + type(self.model).__name__ + ' ' + str(self.model.width))
 
+        # Loss Function Weight
+        self.lambda_pix, self.lambda_gdl, self.lambda_sim, self.lambda_per = loss_lambda
+
         # File Path
         self.data = data
         self.result = result
         self.weight = weight
+
+        # Loss
+        self.get_loss = Loss(device = self.device)
 
         # Model, Optimizer, Data Loader
         self.initialization()
@@ -138,7 +145,7 @@ class Distillation():
         for epoch_index in range(1, self.epoch + 1):
 
             # Starting & Ending Point
-            start_epoch = random.randint(0, len(teacher_trajectory) - self.teacher_epoch - 1)
+            start_epoch = random.randint(20, len(teacher_trajectory) - self.teacher_epoch - 1)
             final_epoch = start_epoch + self.teacher_epoch
 
             # Load Teacher's Parameter
@@ -155,7 +162,30 @@ class Distillation():
                 syn_fake2_g = model(syn_real1_g, flatten_param = student_params)
 
                 # Pixel-Wise Loss
-                loss =  F.mse_loss(syn_fake2_g, syn_real2_g)
+                # loss =  F.mse_loss(syn_fake2_g, syn_real2_g)
+
+                # Total Loss
+                loss = torch.tensor(0.0, requires_grad = True).to(self.device)
+
+                if self.lambda_pix > 0:
+                    # Pixelwise Loss
+                    loss_pix = self.get_loss.get_pix_loss(syn_fake2_g, syn_real2_g)
+                    loss = loss + self.lambda_pix * loss_pix
+
+                if self.lambda_gdl > 0:
+                    # Gradient Difference Loss
+                    loss_gdl = self.get_loss.get_gdl_loss(syn_fake2_g, syn_real2_g)
+                    loss = loss + self.lambda_gdl * loss_gdl
+
+                if self.lambda_sim > 0:
+                    # Similarity Loss
+                    loss_sim = self.get_loss.get_sim_loss(syn_fake2_g, syn_real2_g)
+                    loss = loss + self.lambda_sim * loss_sim
+
+                if self.lambda_per > 0:
+                    # Perceptual Loss
+                    loss_per = self.get_loss.get_per_loss(syn_fake2_g, syn_real2_g)
+                    loss = loss + self.lambda_per * loss_per
 
                 # Compute Gradient
                 grad = torch.autograd.grad(loss, student_params, create_graph = True)[0]
@@ -186,8 +216,6 @@ class Distillation():
             print('=' * 110)
             print('Epoch' + '\t' + str(epoch_index))
             print('Loss' + '\t' + str(param_loss.item()))
-            print('MR Gradient' + '\t' + str(syn_real1_g.grad.abs().mean().item()))
-            print('CT Gradient' + '\t' + str(syn_real2_g.grad.abs().mean().item()))
             print('MR Difference' + '\t' + str((raw_syn_real1_g - syn_real1_g).abs().mean().item()))
             print('CT Difference' + '\t' + str((raw_syn_real2_g - syn_real2_g).abs().mean().item()))
             print('=' * 110)
